@@ -1,0 +1,22 @@
+name: Novo projeto
+description: Cola o link de um site e o museu ganha um quadro novo com a print da página.
+title: "Novo projeto: "
+labels: ["novo-projeto"]
+body:
+  - type: input
+    id: link
+    attributes:
+      label: Link do site
+      placeholder: https://o-meu-site.pt
+    validations:
+      required: true
+  - type: input
+    id: nome
+    attributes:
+      label: Nome do projeto
+      description: Opcional. Se ficar vazio, uso o título da página.
+  - type: textarea
+    id: descricao
+    attributes:
+      label: Descrição curta
+      description: Opcional.

@@ -1,0 +1,77 @@
+name: Novo projeto
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      link:
+        description: "Link do site (vazio = voltar a tirar as prints de todos)"
+        required: false
+      nome:
+        description: "Nome do projeto (opcional)"
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: museu-capturas
+  cancel-in-progress: false
+
+jobs:
+  capturar:
+    # Só o dono do repositório pode acrescentar quadros
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.issue.title, 'Novo projeto') &&
+       github.event.issue.user.login == github.repository_owner)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar o navegador
+        run: |
+          npm install --no-save --no-package-lock playwright@1.48.2
+          npx playwright install --with-deps chromium
+
+      - name: Tirar a print
+        id: captura
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          IN_LINK: ${{ github.event.inputs.link }}
+          IN_NOME: ${{ github.event.inputs.nome }}
+        run: node scripts/capturar.mjs
+
+      - name: Guardar no repositório
+        run: |
+          git config user.name "museu-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add projetos.json capturas
+          git diff --cached --quiet && echo "Nada mudou" && exit 0
+          git commit -m "Quadro: ${{ steps.captura.outputs.nome || 'prints atualizadas' }}"
+          git push
+
+      - name: Responder e fechar o pedido
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOME: ${{ steps.captura.outputs.nome }}
+        run: |
+          URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+          gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} \
+            --body "Feito: o quadro **${NOME}** já está pendurado. Daqui a 1 ou 2 minutos aparece em ${URL}"
+          gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }}
+
+      - name: Avisar se falhou
+        if: failure() && github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} \
+            --body "Não consegui tirar a print desse link. Confirma que o endereço abre no navegador e tenta outra vez. Detalhes: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
